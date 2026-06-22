@@ -11,6 +11,7 @@
 import 'dotenv/config';
 import { connectDB } from './config/db.js';
 import { startResumeParserWorker } from './workers/resumeParserWorker.js';
+import { startAtsScoringWorker } from './workers/atsScoringWorker.js';
 
 const startWorkers = async () => {
   try {
@@ -20,10 +21,10 @@ const startWorkers = async () => {
     await connectDB();
 
     // ── Start all workers ─────────────────────────────────────────────────────
-    startResumeParserWorker();
+    startResumeParserWorker();  // Phase 3 — PDF/DOCX text extraction
+    startAtsScoringWorker();    // Phase 4 — TF-IDF + cosine similarity ATS scoring
 
     // Future workers (uncomment as phases complete):
-    // startAtsScoreWorker();    // Phase 5
     // startReminderWorker();    // Phase 6
 
     console.log('\n✅ All workers running. Waiting for jobs...\n');

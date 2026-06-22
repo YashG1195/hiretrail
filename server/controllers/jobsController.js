@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import Job from '../models/Job.js';
+import Resume from '../models/Resume.js';
 import { createJobSchema, updateJobSchema, listJobsQuerySchema } from '../validators/jobValidators.js';
+import { atsQueue } from '../queues/atsQueue.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -281,6 +283,129 @@ export const getJobStats = async (req, res, next) => {
     const total = Object.values(normalized).reduce((sum, n) => sum + n, 0);
 
     return res.status(200).json({ success: true, total, byStatus: normalized });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── POST /api/jobs/:id/analyze ──────────────────────────────────────────────────────────
+/**
+ * Enqueue an ATS scoring job for this job application.
+ * Body: { resumeId: string }
+ *
+ * Validates:
+ *  - Job belongs to req.user
+ *  - Job has a jobDescription
+ *  - Resume belongs to req.user and has extractedText (parseStatus === 'done')
+ */
+export const analyzeJob = async (req, res, next) => {
+  try {
+    const { id: jobId } = req.params;
+    const { resumeId } = req.body;
+
+    // ── Input validation ────────────────────────────────────────────────────
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return res.status(400).json({ success: false, message: 'Invalid job ID' });
+    }
+    if (!resumeId || !mongoose.Types.ObjectId.isValid(resumeId)) {
+      return res.status(400).json({ success: false, message: 'Valid resumeId is required in request body' });
+    }
+
+    // ── Verify job ownership + jobDescription exists ─────────────────────────
+    const job = await Job.findOne({ _id: jobId, userId: req.user.id, deletedAt: null })
+      .select('jobDescription companyName jobTitle');
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+    if (!job.jobDescription || job.jobDescription.trim().length < 20) {
+      return res.status(400).json({
+        success: false,
+        message: 'Job must have a jobDescription (at least 20 characters) before ATS analysis',
+      });
+    }
+
+    // ── Verify resume belongs to user and is parsed ──────────────────────────
+    const resume = await Resume.findOne({ _id: resumeId, userId: req.user.id })
+      .select('parseStatus extractedText fileName');
+    if (!resume) {
+      return res.status(404).json({ success: false, message: 'Resume not found' });
+    }
+    if (resume.parseStatus !== 'done' || !resume.extractedText) {
+      return res.status(400).json({
+        success: false,
+        message: `Resume is not ready for analysis. Current parse status: "${resume.parseStatus}"`,
+        parseStatus: resume.parseStatus,
+      });
+    }
+
+    // ── Enqueue ATS scoring job ──────────────────────────────────────────────
+    const queueJob = await atsQueue.add(
+      'score-resume',
+      { jobId: jobId.toString(), resumeId: resumeId.toString() },
+      {
+        jobId: `ats:${jobId}:${resumeId}`, // deduplicate by job+resume pair
+      }
+    );
+
+    console.log(`📊 [ATS] Enqueued scoring job ${queueJob.id} for job ${jobId} x resume ${resumeId}`);
+
+    return res.status(202).json({
+      success: true,
+      message: 'ATS analysis queued. Results will be available shortly.',
+      queueJobId: queueJob.id,
+      jobId,
+      resumeId,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── GET /api/jobs/:id/ats-result ──────────────────────────────────────────────────────────
+/**
+ * Return the current ATS score, matched keywords, and gap keywords for a job.
+ * Returns null fields if analysis hasn't run yet.
+ */
+export const getAtsResult = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid job ID' });
+    }
+
+    const job = await Job.findOne(
+      { _id: id, userId: req.user.id, deletedAt: null },
+      // Select only ATS fields + job identifiers for the response
+      {
+        companyName: 1,
+        jobTitle: 1,
+        atsScore: 1,
+        atsKeywordsMatched: 1,
+        atsKeywordGaps: 1,
+        updatedAt: 1,
+      }
+    );
+
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    const hasResult = job.atsScore !== null && job.atsScore !== undefined;
+
+    return res.status(200).json({
+      success: true,
+      hasResult,
+      job: {
+        _id: job._id,
+        companyName: job.companyName,
+        jobTitle: job.jobTitle,
+        atsScore: job.atsScore ?? null,
+        matchedKeywords: job.atsKeywordsMatched ?? [],
+        gapKeywords: job.atsKeywordGaps ?? [],
+        lastAnalyzedAt: hasResult ? job.updatedAt : null,
+      },
+    });
   } catch (err) {
     next(err);
   }
