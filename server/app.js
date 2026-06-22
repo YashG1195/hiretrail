@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 
 import authRoutes from './routes/auth.js';
+import jobsRoutes from './routes/jobs.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -67,8 +68,10 @@ app.get('/health', (req, res) => {
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', authLimiter, authRoutes);
 
+// Phase 2 — Job Applications
+app.use('/api/jobs', jobsRoutes);
+
 // Placeholder routes for future phases
-// app.use('/api/jobs', jobsRoutes);       // Phase 3
 // app.use('/api/resumes', resumeRoutes);  // Phase 4
 // app.use('/api/ats', atsRoutes);         // Phase 5
 // app.use('/api/reports', reportRoutes);  // Phase 7
