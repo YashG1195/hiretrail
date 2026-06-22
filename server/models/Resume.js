@@ -35,16 +35,20 @@ const resumeSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ── Parsed Content (populated by ResumeParserWorker in Phase 4) ──────────
+    // ── Parsed Content (populated by ResumeParserWorker — Phase 3) ───────────
     extractedText: {
       type: String,
       default: null,
-      // Full raw text extracted from the PDF — used by ATS Analyzer in Phase 5
+      // Full raw text extracted from the PDF/DOCX — used by ATS Analyzer in Phase 5
     },
     parseStatus: {
       type: String,
       enum: ['pending', 'processing', 'done', 'failed'],
       default: 'pending',
+    },
+    parsedAt: {
+      type: Date,
+      default: null,
     },
     parseError: {
       type: String,

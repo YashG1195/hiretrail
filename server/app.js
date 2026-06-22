@@ -4,9 +4,17 @@ import cors from 'cors';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import authRoutes from './routes/auth.js';
 import jobsRoutes from './routes/jobs.js';
+import resumeRoutes from './routes/resumes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 const app = express();
 
@@ -71,8 +79,20 @@ app.use('/api/auth', authLimiter, authRoutes);
 // Phase 2 — Job Applications
 app.use('/api/jobs', jobsRoutes);
 
+// Phase 3 — Resume Upload + Parsing
+app.use('/api/resumes', resumeRoutes);
+
+// ─── Static File Serving (local dev uploads) ──────────────────────────────────
+// In production, swap to S3 signed URLs (Phase 4 upgrade)
+app.use(
+  '/uploads',
+  express.static(path.join(__dirname, 'uploads'), {
+    dotfiles: 'deny',
+    maxAge: '1d',
+  })
+);
+
 // Placeholder routes for future phases
-// app.use('/api/resumes', resumeRoutes);  // Phase 4
 // app.use('/api/ats', atsRoutes);         // Phase 5
 // app.use('/api/reports', reportRoutes);  // Phase 7
 
