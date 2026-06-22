@@ -127,6 +127,14 @@ const jobSchema = new mongoose.Schema(
       default: [],
     },
 
+    // ── Reminder Tracking (Phase 5) ──────────────────────────────────────────
+    lastReminderSentAt: {
+      type: Date,
+      default: null,
+      // Updated each time a follow-up reminder email is successfully sent.
+      // Used by staleChecker to prevent over-emailing (min 7-day interval).
+    },
+
     // ── Soft Delete ──────────────────────────────────────────────────────────
     deletedAt: {
       type: Date,
@@ -144,10 +152,15 @@ jobSchema.index({ userId: 1, appliedDate: -1, _id: -1 }); // primary listing ind
 jobSchema.index({ userId: 1, status: 1 });                 // status filter
 jobSchema.index({ userId: 1, tags: 1 });                   // tag filter
 jobSchema.index({ userId: 1, deletedAt: 1 });              // soft delete filter
+jobSchema.index(                                            // stale-job checker
+  { status: 1, appliedDate: 1, lastReminderSentAt: 1, deletedAt: 1 },
+  { name: 'stale_job_checker' }
+);
 jobSchema.index(                                            // text search
   { companyName: 'text', jobTitle: 'text' },
   { weights: { jobTitle: 3, companyName: 2 }, name: 'job_text_search' }
 );
+
 
 const Job = mongoose.model('Job', jobSchema);
 export default Job;

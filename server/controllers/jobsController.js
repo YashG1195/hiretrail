@@ -3,6 +3,7 @@ import Job from '../models/Job.js';
 import Resume from '../models/Resume.js';
 import { createJobSchema, updateJobSchema, listJobsQuerySchema } from '../validators/jobValidators.js';
 import { atsQueue } from '../queues/atsQueue.js';
+import { scheduleFollowUpReminder } from '../services/reminderService.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,9 +26,10 @@ const decodeCursor = (cursor) => {
   }
 };
 
-// ─── POST /api/jobs ───────────────────────────────────────────────────────────
+// ─── POST /api/jobs ───────────────────────────────────────────────────────────────
 /**
  * Create a new job application entry.
+ * Automatically schedules a 7-day follow-up reminder.
  */
 export const createJob = async (req, res, next) => {
   try {
@@ -48,15 +50,22 @@ export const createJob = async (req, res, next) => {
     // Populate user info (name + email only, no passwordHash)
     await job.populate('userId', 'name email');
 
+    // ── Auto-schedule 7-day follow-up reminder (fire-and-forget) ────────────────
+    scheduleFollowUpReminder(job._id, req.user.id, 7).catch((err) =>
+      console.error(`[createJob] Failed to schedule reminder for job ${job._id}: ${err.message}`)
+    );
+
     return res.status(201).json({
       success: true,
       message: 'Job application created',
+      reminderScheduled: '7 days',
       job,
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 // ─── GET /api/jobs ────────────────────────────────────────────────────────────
 /**
@@ -405,6 +414,66 @@ export const getAtsResult = async (req, res, next) => {
         gapKeywords: job.atsKeywordGaps ?? [],
         lastAnalyzedAt: hasResult ? job.updatedAt : null,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── POST /api/jobs/:id/remind ────────────────────────────────────────────────
+/**
+ * Manually schedule (or re-schedule) a follow-up reminder for a job.
+ * Body: { delayDays?: number }  — defaults to 0 (immediate) if not provided.
+ *
+ * Use cases:
+ *  - User wants to snooze and get reminded again in N days
+ *  - User manually triggers a reminder outside the 7-day auto-schedule
+ */
+export const triggerReminder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const delayDays = Number(req.body?.delayDays ?? 0);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid job ID' });
+    }
+
+    if (isNaN(delayDays) || delayDays < 0 || delayDays > 365) {
+      return res.status(400).json({
+        success: false,
+        message: 'delayDays must be a number between 0 and 365',
+      });
+    }
+
+    // Verify ownership + job is not deleted or terminal
+    const job = await Job.findOne({
+      _id: id,
+      userId: req.user.id,
+      deletedAt: null,
+    }).select('companyName jobTitle status');
+
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    const TERMINAL_STATUSES = ['offer', 'rejected', 'withdrawn'];
+    if (TERMINAL_STATUSES.includes(job.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot schedule a reminder for a job with status "${job.status}"`,
+      });
+    }
+
+    const bullJob = await scheduleFollowUpReminder(id, req.user.id, delayDays);
+
+    const delayLabel =
+      delayDays === 0 ? 'immediately' : `in ${delayDays} day${delayDays === 1 ? '' : 's'}`;
+
+    return res.status(202).json({
+      success: true,
+      message: `Reminder scheduled — will send ${delayLabel}`,
+      queueJobId: bullJob.id,
+      delayDays,
     });
   } catch (err) {
     next(err);

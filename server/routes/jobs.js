@@ -9,6 +9,7 @@ import {
   getJobStats,
   analyzeJob,
   getAtsResult,
+  triggerReminder,
 } from '../controllers/jobsController.js';
 
 const router = Router();
@@ -27,5 +28,8 @@ router.delete('/:id', deleteJob);                // Soft delete
 // ─── ATS Analysis (Phase 4) ───────────────────────────────────────────────────
 router.post('/:id/analyze', analyzeJob);         // Enqueue ATS scoring job → 202
 router.get('/:id/ats-result', getAtsResult);     // Fetch atsScore + keyword results
+
+// ─── Reminders (Phase 5) ─────────────────────────────────────────────────────
+router.post('/:id/remind', triggerReminder);     // Manual reminder trigger / snooze
 
 export default router;
