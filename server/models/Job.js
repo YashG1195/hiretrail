@@ -160,7 +160,10 @@ jobSchema.index(                                            // text search
   { companyName: 'text', jobTitle: 'text' },
   { weights: { jobTitle: 3, companyName: 2 }, name: 'job_text_search' }
 );
-
+jobSchema.index(                                            // aggregation/report queries (Phase 6)
+  { userId: 1, appliedDate: -1, status: 1 },
+  { name: 'report_aggregation' }
+);
 
 const Job = mongoose.model('Job', jobSchema);
 export default Job;

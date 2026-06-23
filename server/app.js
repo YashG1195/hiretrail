@@ -10,7 +10,9 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import jobsRoutes from './routes/jobs.js';
 import resumeRoutes from './routes/resumes.js';
+import reportRoutes from './routes/reports.js';
 import { errorHandler } from './middleware/errorHandler.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,9 +94,13 @@ app.use(
   })
 );
 
-// Placeholder routes for future phases
-// app.use('/api/ats', atsRoutes);         // Phase 5
-// app.use('/api/reports', reportRoutes);  // Phase 7
+// Phase 4 (ATS) — routes are sub-routes of /api/jobs (/:id/analyze, /:id/ats-result)
+
+// Phase 5 — Reminder endpoints are sub-routes of /api/jobs (/:id/remind)
+
+// Phase 6 — Reports (summary JSON, PDF export, CSV export)
+app.use('/api/reports', reportRoutes);
+
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((req, res) => {

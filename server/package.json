@@ -11,6 +11,7 @@
     "worker:dev": "nodemon worker.js"
   },
   "dependencies": {
+    "@json2csv/plainjs": "^7.0.6",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.79.1",
     "cors": "^2.8.5",
@@ -26,6 +27,7 @@
     "natural": "^8.1.1",
     "nodemailer": "^9.0.1",
     "pdf-parse": "^1.1.4",
+    "pdfkit": "^0.19.1",
     "zod": "^3.23.4"
   },
   "devDependencies": {
